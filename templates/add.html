@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Új Hely Hozzáadása{% endblock %}
+
+{% block content %}
+<h1 class="text-center">Új hely hozzáadása</h1>
+
+<!-- Táblázatos szerkezet az űrlaphoz -->
+<form method="POST" action="{{ url_for('add_place') }}">
+    <table class="styled-form-table">
+        <tr>
+            <td><label for="name" class="form-label">Név:</label></td>
+            <td><input type="text" id="name" name="name" class="form-control" required></td>
+        </tr>
+        <tr>
+            <td><label for="east" class="form-label">Kelet (longitude):</label></td>
+            <td><input type="text" id="east" name="east" class="form-control" pattern="\d{1,2}(\.\d{1,7})?" required title="Formátum: 1-2 számjegy + opcionális . + maximum 7 számjegy"></td>
+        </tr>
+        <tr>
+            <td><label for="north" class="form-label">Észak (latitude):</label></td>
+            <td><input type="text" id="north" name="north" class="form-control" pattern="\d{1,2}(\.\d{1,7})?" required title="Formátum: 1-2 számjegy + opcionális . + maximum 7 számjegy"></td>
+        </tr>
+        <tr>
+            <td><label for="address" class="form-label">Cím:</label></td>
+            <td><input type="text" id="address" name="address" class="form-control"></td>
+        </tr>
+        <tr>
+            <td><label for="notes" class="form-label">Megjegyzések:</label></td>
+            <td><textarea id="notes" name="notes" class="form-control"></textarea></td>
+        </tr>
+        <tr>
+            <td colspan="2" class="text-center">
+                <button type="submit" class="btn btn-primary">Hozzáadás</button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">Vissza</a>
+            </td>
+        </tr>
+    </table>
+</form>
+{% endblock %}

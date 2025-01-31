@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}CSV Importálása{% endblock %}
+
+{% block content %}
+<h1>CSV Importálása</h1>
+<form method="POST" action="{{ url_for('import_csv') }}" enctype="multipart/form-data">
+    <div class="mb-3">
+        <label for="file" class="form-label">Válasszon ki egy CSV fájlt:</label>
+        <input type="file" id="file" name="file" class="form-control" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Importálás</button>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">Vissza</a>
+</form>
+{% endblock %}

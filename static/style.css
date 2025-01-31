@@ -1,0 +1,201 @@
+/* ===========================
+   Globális CSS változók beállítása
+   =========================== */
+:root {
+    --search-width: 250px; /* Keresőmező alapértelmezett szélessége */
+    --search-height: 30px; /* Keresőmező alapértelmezett magassága */
+    --search-font-size: 14px; /* Keresőmező betűmérete */
+
+    --table-width: 100%; /* Táblázat szélessége */
+    --table-font-size: 14px; /* Táblázat betűmérete */
+    --table-cell-padding: 6px; /* Táblázat celláinak térköze */
+}
+
+/* ===========================
+   Keresőmező stílusok - Bootstrap felülírása
+   =========================== */
+#searchInput {
+    width: var(--search-width) !important; /* A keresőmező szélessége */
+    height: var(--search-height) !important; /* A keresőmező magassága */
+    font-size: var(--search-font-size) !important; /* Betűméret */
+    max-width: none !important; /* Bootstrap max-width felülírása */
+    display: inline-block !important; /* Megakadályozza a 100% szélességet */
+    padding: 5px 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    margin: 10px auto;
+}
+
+/* Mobilnézetben a keresőmező teljes szélességet kap */
+@media (max-width: 600px) {
+    #searchInput {
+        width: 100% !important;
+    }
+}
+
+/* ===========================
+   Táblázat stílusok - Méretezhető
+   =========================== */
+table {
+    width: var(--table-width); /* Táblázat szélessége */
+    border-collapse: collapse;
+    margin: 10px 0;
+}
+
+table th, table td {
+    border: 1px solid #ddd;
+    padding: var(--table-cell-padding); /* Cellák térköze változtatható */
+    text-align: center;
+    font-size: var(--table-font-size) !important; /* Eredeti betűméret megtartása */
+    height: auto; /* Automatikus méretezés a tartalom alapján */
+    vertical-align: middle; /* Szöveg függőleges középre igazítása */
+}
+
+/* ===========================
+   Gombstílusok (NEM VÁLTOZOTT)
+   =========================== */
+.btn, .btn-action-new, .btn-action-import, .btn-action-export, .btn-secondary-action, .btn-secondary-action-map, .btn-search, .btn-clear {
+    display: inline-block;
+    font-size: 0.6rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 6px;
+    font-weight: normal;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+}
+
+/* Fő műveleti gombok */
+.btn-action-new {
+    background-color: #007bff; /* Kék - Új hely hozzáadása */
+    color: white;
+}
+
+.btn-action-import {
+    background-color: #6c757d; /* Szürke - CSV importálás */
+    color: white;
+}
+
+.btn-action-export {
+    background-color: #28a745; /* Zöld - CSV exportálás */
+    color: white;
+}
+
+/* Másodlagos műveleti gombok */
+.btn-secondary-action-map {
+    background-color: #17a2b8; /* Türkiz - Térképen */
+    color: white;
+}
+
+.btn-secondary-action-edit {
+    background-color: #ffc107; /* Sárga - Módosítás */
+    color: black;
+}
+
+.btn-secondary-action-delete {
+    background-color: #dc3545; /* Piros - Törlés */
+    color: white;
+}
+
+/* Keresés és Ürítés gombok */
+.btn-search {
+    background-color: #007bff;
+    color: white;
+}
+
+.btn-clear {
+    background-color: #6c757d;
+    color: white;
+}
+
+/* ===========================
+   Egyedi címstílusok
+   =========================== */
+h1 {
+    font-size: 28px !important;
+    font-weight: bold;
+    text-align: center;
+}
+
+/* ===========================
+   Új Hely Hozzáadása - Táblázatos Stílus
+   =========================== */
+.styled-form-table {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    border-collapse: collapse; /* Cellák közötti térköz eltüntetése */
+    background-color: #f8f9fa; /* Világos háttér */
+    border-radius: 8px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+/* Sorok és cellák beállítása */
+.styled-form-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+}
+
+/* Címkék stílusa */
+.styled-form-table label {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* Űrlapmezők formázása */
+.styled-form-table .form-control {
+    width: 100%;
+    padding: 8px;
+    font-size: 16px;
+    border-radius: 5px;
+}
+
+/* Gombok igazítása */
+.styled-form-table button, 
+.styled-form-table a {
+    margin-top: 10px;
+    display: inline-block;
+}
+
+/* ===========================
+   Módosítás oldal - Táblázatos Stílus
+   =========================== */
+.styled-form-table {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    border-collapse: collapse; /* Cellák közötti térköz eltüntetése */
+    background-color: #f8f9fa; /* Világos háttér */
+    border-radius: 8px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+}
+
+/* Sorok és cellák beállítása */
+.styled-form-table td {
+    padding: 10px;
+    border: 1px solid #ddd;
+}
+
+/* Címkék stílusa */
+.styled-form-table label {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* Űrlapmezők formázása */
+.styled-form-table .form-control {
+    width: 100%;
+    padding: 8px;
+    font-size: 16px;
+    border-radius: 5px;
+}
+
+/* Gombok igazítása */
+.styled-form-table button, 
+.styled-form-table a {
+    margin-top: 10px;
+    display: inline-block;
+}

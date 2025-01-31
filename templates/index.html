@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Helyek Listája{% endblock %}
+
+{% block content %}
+<h1 class="text-center">Helyek Listája</h1>
+
+<!-- Gombok és keresőmező egy sorban -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex gap-2">
+        <a href="{{ url_for('add_place') }}" class="btn btn-action-new btn-sm">Új hely hozzáadása</a>
+        <a href="{{ url_for('import_csv') }}" class="btn btn-action-import btn-sm">CSV importálása</a>
+        <a href="{{ url_for('export_csv') }}" class="btn btn-action-export btn-sm">CSV exportálása</a>
+    </div>
+    
+    <div class="d-flex align-items-center gap-2">
+        <input type="text" id="searchInput" class="form-control" placeholder="Keresés...">
+        <button id="searchButton" class="btn btn-search">Keresés</button>
+        <button id="clearButton" class="btn btn-clear">Ürítés</button>
+    </div>
+</div>
+
+<!-- Táblázat -->
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Név</th>
+            <th>Kelet</th>
+            <th>Észak</th>
+            <th>Cím</th>
+            <th>Megjegyzések</th>
+            <th>Műveletek</th>
+        </tr>
+    </thead>
+    <tbody id="placesTable">
+        {% for place in places %}
+        <tr>
+            <td>{{ place['name'] }}</td>
+            <td>{{ place['east'] }}</td>
+            <td>{{ place['north'] }}</td>
+            <td>{{ place['address'] }}</td>
+            <td>{{ place['notes'] }}</td>
+            <td>
+                <a href="https://www.google.com/maps/search/?api=1&query={{ place['east'] }},{{ place['north'] }}" target="_blank" class="btn btn-secondary-action-map btn-sm">Térkép</a>
+                <a href="{{ url_for('edit', id=place['id']) }}" class="btn btn-secondary-action-edit btn-sm">Módosítás</a>
+				<form action="{{ url_for('delete', id=place['id']) }}" method="post" style="display:inline;" onsubmit="return confirmDelete();">
+				<button class="btn btn-secondary-action-delete btn-sm">Törlés</button>
+				</form>
+
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if not places %}
+<div class="alert alert-info text-center">Nincsenek mentett helyek.</div>
+{% endif %}
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+{% endblock %}
