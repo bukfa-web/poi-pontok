@@ -249,12 +249,11 @@ print("\n📌 Regisztrált Flask végpontok:")
 print(app.url_map)  # 📌 Kiírja az összes elérhető Flask végpontot
 
 if __name__ == "__main__":
-    import threading
-    import time
-    import webbrowser
+    from waitress import serve
+    import os
 
-    threading.Thread(target=lambda: time.sleep(1) or webbrowser.open("http://127.0.0.1:5000")).start()
-    app.run(debug=False, host="127.0.0.1", port=5000)
+    port = int(os.environ.get("PORT", 5000))  # Railway által adott port
+    serve(app, host="0.0.0.0", port=port)
 
 
 
