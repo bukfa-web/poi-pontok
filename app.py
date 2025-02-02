@@ -255,5 +255,36 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))  # Railway által adott port
     serve(app, host="0.0.0.0", port=port)
 
+from flask import Flask, jsonify, request
+import sqlite3
+
+app = Flask(__name__)
+
+def get_places():
+    """Lekérdezi az összes helyet az adatbázisból"""
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, latitude, longitude, address FROM places")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    places = []
+    for row in rows:
+        places.append({
+            "name": row[0],
+            "latitude": row[1],
+            "longitude": row[2],
+            "address": row[3]
+        })
+    
+    return places
+
+@app.route('/api/places', methods=['GET'])
+def api_places():
+    """API végpont, ami JSON formátumban visszaadja a helyeket"""
+    return jsonify(get_places())
+
+if __name__ == '__main__':
+    app.run(debug=True)
 
 
