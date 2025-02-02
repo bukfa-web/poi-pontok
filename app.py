@@ -42,10 +42,36 @@ def index():
     conn.close()
     return render_template("index.html", places=places)
 
-# CRUD, Import, Export, API végpontok
-def full_application_code():
-    # Az összes funkció bekerül ide
-    pass  # Ezt cseréld le a teljes kódra!
+@app.route("/api/places", methods=["GET"])
+def api_places():
+    """ API végpont, ami JSON formátumban visszaadja a helyeket """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, east, north, address FROM places")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    places = []
+    for row in rows:
+        places.append({
+            "name": row["name"],
+            "east": row["east"],
+            "north": row["north"],
+            "address": row["address"]
+        })
+    
+    return jsonify(places)
+
+@app.route("/delete/<int:id>", methods=["POST"])
+def delete(id):
+    """ Hely törlése """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM places WHERE id = ?", (id,))
+    conn.commit()
+    conn.close()
+    flash("🗑️ Hely sikeresen törölve!", "success")
+    return redirect(url_for("index"))
 
 print("\n📌 Regisztrált Flask végpontok:")
 print(app.url_map)  # 📌 Kiírja az összes elérhető Flask végpontot
