@@ -4,8 +4,6 @@ import sqlite3
 import re
 import os
 import csv
-import threading
-import time
 import sys
 
 app = Flask(__name__)
@@ -13,30 +11,24 @@ app.secret_key = "titkoskulcs"
 
 # Adatbázis elérési út beállítása
 def get_database_path():
-    """ Meghatározza az adatbázis helyét az EXE futtatása esetén """
     if getattr(sys, 'frozen', False):
         base_path = sys._MEIPASS  # PyInstaller által generált ideiglenes mappa
     else:
         base_path = os.path.dirname(os.path.abspath(__file__))  # Normál futtatás esetén
-
     return os.path.join(base_path, "database.db")
 
 DATABASE = get_database_path()
 
-# Adatbázis kapcsolat
 def get_db_connection():
-    """ Adatbázis kapcsolat létrehozása """
     conn = sqlite3.connect(DATABASE, timeout=10, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-# Koordináta formátum ellenőrzés
 def is_valid_coordinate(value):
     return bool(re.match(r"^\d{1,2}(\.\d{1,7})?$", value))
 
 @app.route("/")
 def index():
-    """ Főoldal - listázza az adatokat """
     conn = get_db_connection()
     places = conn.execute("SELECT * FROM places ORDER BY name").fetchall()
     conn.close()
@@ -44,27 +36,33 @@ def index():
 
 @app.route("/api/places", methods=["GET"])
 def api_places():
-    """ API végpont, ami JSON formátumban visszaadja a helyeket """
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, east, north, address FROM places")
-    rows = cursor.fetchall()
+    places = conn.execute("SELECT * FROM places ORDER BY name").fetchall()
     conn.close()
+    return jsonify([dict(row) for row in places])
+
+@app.route("/add", methods=["GET", "POST"])
+def add_place():
+    if request.method == "POST":
+        name = request.form["name"].strip()
+        east = "{:.7f}".format(float(request.form["east"].strip()))
+        north = "{:.7f}".format(float(request.form["north"].strip()))
+        address = request.form.get("address", "").strip()
+        notes = request.form.get("notes", "").strip()
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO places (name, east, north, address, notes) VALUES (?, ?, ?, ?, ?)",
+                       (name, east, north, address, notes))
+        conn.commit()
+        conn.close()
+        flash("✅ Hely sikeresen hozzáadva!", "success")
+        return redirect(url_for("index"))
     
-    places = []
-    for row in rows:
-        places.append({
-            "name": row["name"],
-            "east": row["east"],
-            "north": row["north"],
-            "address": row["address"]
-        })
-    
-    return jsonify(places)
+    return render_template("add.html")
 
 @app.route("/delete/<int:id>", methods=["POST"])
 def delete(id):
-    """ Hely törlése """
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM places WHERE id = ?", (id,))
@@ -73,11 +71,23 @@ def delete(id):
     flash("🗑️ Hely sikeresen törölve!", "success")
     return redirect(url_for("index"))
 
-print("\n📌 Regisztrált Flask végpontok:")
-print(app.url_map)  # 📌 Kiírja az összes elérhető Flask végpontot
+@app.route("/export")
+def export_csv():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT name, east, north, address, notes FROM places")
+    places = cursor.fetchall()
+    conn.close()
+    
+    csv_data = "Név,Kelet,Észak,Cím,Megjegyzések\n"
+    for place in places:
+        csv_data += f"{place['name']},{place['east']},{place['north']},{place['address']},{place['notes']}\n"
+    
+    response = Response(csv_data.encode("utf-8-sig"), mimetype="text/csv")
+    response.headers["Content-Disposition"] = "attachment; filename=helyek_export.csv"
+    return response
 
 if __name__ == "__main__":
     from waitress import serve
-    import os
-    port = int(os.environ.get("PORT", 5000))  # Railway által adott port
+    port = int(os.environ.get("PORT", 8080))  # Railway által adott port
     serve(app, host="0.0.0.0", port=port)
