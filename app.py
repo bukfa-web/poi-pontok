@@ -188,6 +188,28 @@ def export_csv():
 print("\n📌 Regisztrált Flask végpontok:")
 print(app.url_map)
 
+# 🆕 API végpont az összes hely JSON-ként való lekérdezésére
+@app.route("/api/places", methods=["GET"])
+def api_places():
+    """API végpont az összes hely listázására JSON formátumban."""
+    conn = get_db_connection()
+    places = conn.execute("SELECT * FROM places ORDER BY name").fetchall()
+    conn.close()
+
+    # JSON-válasz létrehozása
+    places_list = []
+    for place in places:
+        places_list.append({
+            "id": place["id"],
+            "name": place["name"],
+            "east": place["east"],
+            "north": place["north"],
+            "address": place["address"],
+            "notes": place["notes"]
+        })
+    
+    return jsonify(places_list)
+
 if __name__ == "__main__":
     from waitress import serve
     port = int(os.environ.get("PORT", 5000))
