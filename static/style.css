@@ -12,11 +12,11 @@
 }
 
 /* ===========================
-   Sötét téma - Háttérszín és szöveg beállítása
+   Sötét téma - Háttérszín és szöveg beállítása (Google sötét mód színei)
    =========================== */
 body {
-    background-color: #333333 !important; /* Sötétszürke háttér */
-    color: #ffffff !important; /* Fehér szöveg az olvashatóság érdekében */
+    background-color: #202124 !important; /* Google sötét mód háttérszíne */
+    color: #bdc1c6 !important; /* Világosszürke szöveg az olvashatóság érdekében */
 }
 
 /* A Bootstrap által használt container háttérszínének felülírása */
@@ -26,17 +26,18 @@ body {
 
 /* A Bootstrap alert üzenetek háttérszínének és szövegének biztosítása */
 .alert {
-    color: #ffffff !important; /* Fehér szöveg az alert üzenetekben */
-    background-color: #444444 !important; /* Sötétebb háttér az alert üzenetekhez */
+    color: #bdc1c6 !important; /* Világosszürke szöveg az alert üzenetekben */
+    background-color: #303134 !important; /* Sötétebb háttér az alert üzenetekhez */
+    border-color: #5f6368 !important; /* Sötét szegély */
 }
 
 /* Linkek színének módosítása a sötét háttérhez */
 a {
-    color: #66b3ff !important; /* Világoskék linkek a jobb láthatóság érdekében */
+    color: #8ab4f8 !important; /* Google-stílusú világoskék linkek */
 }
 
 a:hover {
-    color: #99ccff !important; /* Világosabb kék a hover effektusnál */
+    color: #bdc1c6 !important; /* Világosszürke a hover effektusnál */
 }
 
 /* ===========================
@@ -49,11 +50,11 @@ a:hover {
     max-width: none !important; /* Bootstrap max-width felülírása */
     display: inline-block !important; /* Megakadályozza a 100% szélességet */
     padding: 5px 10px;
-    border: 1px solid #666; /* Sötétebb szegély a sötét háttérhez */
+    border: 1px solid #5f6368 !important; /* Sötét szegély a sötét háttérhez */
     border-radius: 5px;
     margin: 10px auto;
-    background-color: #444444 !important; /* Sötétebb háttér a keresőmezőhöz */
-    color: #ffffff !important; /* Fehér szöveg */
+    background-color: #303134 !important; /* Sötétebb háttér a keresőmezőhöz */
+    color: #bdc1c6 !important; /* Világosszürke szöveg */
 }
 
 /* Mobilnézetben a keresőmező teljes szélességet kap */
@@ -64,32 +65,40 @@ a:hover {
 }
 
 /* ===========================
-   Táblázat stílusok - Méretezhető
+   Táblázat stílusok - Méretezhető (Google sötét módhoz igazítva)
    =========================== */
-table {
+table, .table {
     width: var(--table-width); /* Táblázat szélessége */
     border-collapse: collapse;
     margin: 10px 0;
-    background-color: #444444 !important; /* Sötétebb háttér a táblázathoz */
+    background-color: #303134 !important; /* Sötétebb háttér a táblázathoz */
+    border: 1px solid #5f6368 !important; /* Sötét szegély */
 }
 
-table th, table td {
-    border: 1px solid #666; /* Sötétebb szegély a sötét háttérhez */
+table th, table td, .table th, .table td {
+    border: 1px solid #5f6368 !important; /* Sötét szegély a sötét háttérhez */
     padding: var(--table-cell-padding); /* Cellák térköze változtatható */
     text-align: center;
     font-size: var(--table-font-size) !important; /* Eredeti betűméret megtartása */
     height: auto; /* Automatikus méretezés a tartalom alapján */
     vertical-align: middle; /* Szöveg függőleges középre igazítása */
-    color: #ffffff !important; /* Fehér szöveg a táblázat celláiban */
+    color: #bdc1c6 !important; /* Világosszürke szöveg a táblázat celláiban */
+    background-color: #303134 !important; /* Biztosítjuk, hogy a cellák háttere is sötét legyen */
 }
 
 /* Táblázat fejlécek (th) stílusa */
-table th {
-    background-color: #555555 !important; /* Még sötétebb háttér a fejlécekhez */
+table th, .table th {
+    background-color: #3c4043 !important; /* Még sötétebb háttér a fejlécekhez */
+    color: #ffffff !important; /* Fehér szöveg a fejlécekben */
+}
+
+/* Bootstrap table-striped esetén a páros sorok háttere */
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: #2c2e31 !important; /* Kicsit világosabb szürke a páros sorokhoz */
 }
 
 /* ===========================
-   Gombstílusok (NEM VÁLTOZOTT)
+   Gombstílusok (Sötét témához igazítva)
    =========================== */
 .btn, .btn-action-new, .btn-action-import, .btn-action-export, .btn-secondary-action, .btn-secondary-action-map, .btn-search, .btn-clear {
     display: inline-block;
@@ -105,45 +114,50 @@ table th {
 
 /* Fő műveleti gombok */
 .btn-action-new {
-    background-color: #007bff; /* Kék - Új hely hozzáadása */
-    color: white;
+    background-color: #4285f4; /* Google-kék - Új hely hozzáadása */
+    color: #ffffff !important;
 }
 
 .btn-action-import {
     background-color: #6c757d; /* Szürke - CSV importálás */
-    color: white;
+    color: #ffffff !important;
 }
 
 .btn-action-export {
-    background-color: #28a745; /* Zöld - CSV exportálás */
-    color: white;
+    background-color: #34a853; /* Google-zöld - CSV exportálás */
+    color: #ffffff !important;
 }
 
 /* Másodlagos műveleti gombok */
 .btn-secondary-action-map {
     background-color: #17a2b8; /* Türkiz - Térképen */
-    color: white;
+    color: #ffffff !important;
 }
 
 .btn-secondary-action-edit {
-    background-color: #ffc107; /* Sárga - Módosítás */
-    color: black;
+    background-color: #fbbc05; /* Google-sárga - Módosítás */
+    color: #000000 !important;
 }
 
 .btn-secondary-action-delete {
-    background-color: #dc3545; /* Piros - Törlés */
-    color: white;
+    background-color: #ea4335; /* Google-piros - Törlés */
+    color: #ffffff !important;
 }
 
 /* Keresés és Ürítés gombok */
 .btn-search {
-    background-color: #007bff;
-    color: white;
+    background-color: #4285f4; /* Google-kék */
+    color: #ffffff !important;
 }
 
 .btn-clear {
-    background-color: #6c757d;
-    color: white;
+    background-color: #6c757d; /* Szürke */
+    color: #ffffff !important;
+}
+
+/* Bootstrap btn-close (alert bezáró gomb) */
+.btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%) !important; /* Fehér X a sötét háttérhez */
 }
 
 /* ===========================
@@ -157,14 +171,14 @@ h1 {
 }
 
 /* ===========================
-   Új Hely Hozzáadása - Táblázatos Stílus
+   Új Hely Hozzáadása és Módosítás oldal - Táblázatos Stílus
    =========================== */
 .styled-form-table {
     width: 100%;
     max-width: 600px;
     margin: 0 auto;
     border-collapse: collapse; /* Cellák közötti térköz eltüntetése */
-    background-color: #444444 !important; /* Sötétebb háttér az űrlap táblázathoz */
+    background-color: #303134 !important; /* Sötétebb háttér az űrlap táblázathoz */
     border-radius: 8px;
     box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.3); /* Árnyék erősebb a sötét háttérhez */
     padding: 15px;
@@ -173,15 +187,16 @@ h1 {
 /* Sorok és cellák beállítása */
 .styled-form-table td {
     padding: 10px;
-    border: 1px solid #666; /* Sötétebb szegély a sötét háttérhez */
-    color: #ffffff !important; /* Fehér szöveg a cellákban */
+    border: 1px solid #5f6368 !important; /* Sötét szegély a sötét háttérhez */
+    color: #bdc1c6 !important; /* Világosszürke szöveg a cellákban */
+    background-color: #303134 !important; /* Biztosítjuk, hogy a cellák háttere is sötét legyen */
 }
 
 /* Címkék stílusa */
 .styled-form-table label {
     font-weight: bold;
     font-size: 14px;
-    color: #ffffff !important; /* Fehér szöveg a címkékhez */
+    color: #bdc1c6 !important; /* Világosszürke szöveg a címkékhez */
 }
 
 /* Űrlapmezők formázása */
@@ -190,9 +205,9 @@ h1 {
     padding: 8px;
     font-size: 16px;
     border-radius: 5px;
-    background-color: #555555 !important; /* Sötétebb háttér az űrlapmezőkhöz */
-    color: #ffffff !important; /* Fehér szöveg */
-    border: 1px solid #666 !important; /* Sötétebb szegély */
+    background-color: #3c4043 !important; /* Sötétebb háttér az űrlapmezőkhöz */
+    color: #bdc1c6 !important; /* Világosszürke szöveg */
+    border: 1px solid #5f6368 !important; /* Sötét szegély */
 }
 
 /* Gombok igazítása */
