@@ -51,18 +51,16 @@ def add_place():
             flash("⚠️ Érvénytelen koordináta formátum!", "danger")
             return redirect(url_for("add_place"))
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        try:
-    cursor.execute("INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)", 
-                   (name, east, north, address, notes))
-    conn.commit()
-    flash("✅ Hely sikeresen hozzáadva!", "success")
-except Exception as e:
-    flash(f"⚠️ Hiba történt: {str(e)}", "danger")
-        finally:
-            conn.close()
+        # Kontextuskezelő használata a kapcsolat kezelésére
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute("INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)", 
+                               (name, east, north, address, notes))
+                conn.commit()
+                flash("✅ Hely sikeresen hozzáadva!", "success")
+            except Exception as e:
+                flash(f"⚠️ Hiba történt: {str(e)}", "danger")
 
         return redirect(url_for("index"))
 
