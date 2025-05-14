@@ -55,12 +55,12 @@ def add_place():
         cursor = conn.cursor()
 
         try:
-            cursor.execute("INSERT INTO places (name, east, north, address, notes) VALUES (?, ?, ?, ?, ?)", 
-                           (name, east, north, address, notes))
-            conn.commit()
-            flash("✅ Hely sikeresen hozzáadva!", "success")
-        except sqlite3.IntegrityError:
-            flash("⚠️ Ez a hely már létezik!", "warning")
+    cursor.execute("INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)", 
+                   (name, east, north, address, notes))
+    conn.commit()
+    flash("✅ Hely sikeresen hozzáadva!", "success")
+except Exception as e:
+    flash(f"⚠️ Hiba történt: {str(e)}", "danger")
         finally:
             conn.close()
 
