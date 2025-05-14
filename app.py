@@ -6,6 +6,7 @@ import psycopg2.pool
 import re
 import os
 import csv
+import time
 from waitress import serve
 
 # Naplózás beállítása (INFO és ERROR szintek)
@@ -26,29 +27,42 @@ if not DATABASE_URL:
 try:
     db_pool = psycopg2.pool.SimpleConnectionPool(
         minconn=1,  # Minimális kapcsolatok száma
-        maxconn=10,  # Maximális kapcsolatok száma
-        dsn=DATABASE_URL
+        maxconn=5,  # Maximális kapcsolatok számának csökkentése
+        dsn=DATABASE_URL,
+        # Keepalive beállítások
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5
     )
     logger.info("Kapcsolat pool sikeresen inicializálva.")
 except Exception as e:
     logger.error(f"Hiba a kapcsolat pool inicializálása során: {str(e)}")
     raise
 
-# Kapcsolat lekérése a poolból
-def get_db_connection():
+# Kapcsolat lekérése a poolból újracsatlakozási logikával
+def get_db_connection(max_retries=3, retry_delay=1):
     """ Kapcsolat lekérése a poolból """
-    try:
-        conn = db_pool.getconn()
-        conn.cursor_factory = psycopg2.extras.DictCursor
-        # Keepalive beállítások a kapcsolat stabilizálására
-        conn.set_session(autocommit=False)
-        return conn
-    except psycopg2.OperationalError as e:
-        logger.warning(f"Kapcsolódási hiba a poolból: {str(e)}")
-        raise
-    except Exception as e:
-        logger.error(f"Hiba a kapcsolat lekérése során: {str(e)}")
-        raise
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            conn = db_pool.getconn()
+            conn.cursor_factory = psycopg2.extras.DictCursor
+            # Teszteljük a kapcsolatot egy egyszerű lekérdezéssel
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+            logger.debug("Kapcsolat sikeresen lekérve a poolból.")
+            return conn
+        except psycopg2.OperationalError as e:
+            logger.warning(f"Kapcsolódási hiba (próbálkozás {attempt + 1}/{max_retries}): {str(e)}")
+            attempt += 1
+            if attempt == max_retries:
+                logger.error(f"Kapcsolódás sikertelen {max_retries} próbálkozás után: {str(e)}")
+                raise
+            time.sleep(retry_delay)
+        except Exception as e:
+            logger.error(f"Hiba a kapcsolat lekérése során: {str(e)}")
+            raise
 
 # Kapcsolat visszahelyezése a poolba
 def release_db_connection(conn):
