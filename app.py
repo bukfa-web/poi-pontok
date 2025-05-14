@@ -2,10 +2,10 @@ import logging
 from flask import Flask, render_template, request, redirect, url_for, flash, Response, jsonify
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import re
 import os
 import csv
-import time
 from waitress import serve
 
 # Naplózás beállítása (INFO és ERROR szintek)
@@ -22,29 +22,41 @@ if not DATABASE_URL:
     logger.error("DATABASE_URL környezetváltozó nincs beállítva!")
     raise ValueError("DATABASE_URL környezetváltozó nincs beállítva!")
 
-# Adatbázis kapcsolat létrehozása újracsatlakozási logikával
-def get_db_connection(max_retries=3, retry_delay=1):
-    """ Adatbázis kapcsolat létrehozása PostgreSQL-hez újracsatlakozási logikával """
-    attempt = 0
-    while attempt < max_retries:
-        try:
-            conn = psycopg2.connect(DATABASE_URL)
-            conn.cursor_factory = psycopg2.extras.DictCursor
-            # Teszteljük a kapcsolatot egy egyszerű lekérdezéssel
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            logger.debug("Kapcsolat sikeresen megnyitva.")
-            return conn
-        except psycopg2.OperationalError as e:
-            logger.warning(f"Kapcsolódási hiba (próbálkozás {attempt + 1}/{max_retries}): {str(e)}")
-            attempt += 1
-            if attempt == max_retries:
-                logger.error(f"Kapcsolódás sikertelen {max_retries} próbálkozás után: {str(e)}")
-                raise
-            time.sleep(retry_delay)
-        except Exception as e:
-            logger.error(f"Hiba a kapcsolat megnyitásakor: {str(e)}")
-            raise
+# Kapcsolat pool inicializálása
+try:
+    db_pool = psycopg2.pool.SimpleConnectionPool(
+        minconn=1,  # Minimális kapcsolatok száma
+        maxconn=10,  # Maximális kapcsolatok száma
+        dsn=DATABASE_URL
+    )
+    logger.info("Kapcsolat pool sikeresen inicializálva.")
+except Exception as e:
+    logger.error(f"Hiba a kapcsolat pool inicializálása során: {str(e)}")
+    raise
+
+# Kapcsolat lekérése a poolból
+def get_db_connection():
+    """ Kapcsolat lekérése a poolból """
+    try:
+        conn = db_pool.getconn()
+        conn.cursor_factory = psycopg2.extras.DictCursor
+        # Keepalive beállítások a kapcsolat stabilizálására
+        conn.set_session(autocommit=False)
+        return conn
+    except psycopg2.OperationalError as e:
+        logger.warning(f"Kapcsolódási hiba a poolból: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Hiba a kapcsolat lekérése során: {str(e)}")
+        raise
+
+# Kapcsolat visszahelyezése a poolba
+def release_db_connection(conn):
+    """ Kapcsolat visszahelyezése a poolba """
+    try:
+        db_pool.putconn(conn)
+    except Exception as e:
+        logger.error(f"Hiba a kapcsolat visszahelyezése során: {str(e)}")
 
 # Koordináta formátum ellenőrzés
 def is_valid_coordinate(value):
@@ -54,11 +66,12 @@ def is_valid_coordinate(value):
 # Főoldal
 @app.route("/")
 def index():
+    conn = None
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM places ORDER BY name")
-                places = cursor.fetchall()
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM places ORDER BY name")
+            places = cursor.fetchall()
         return render_template("index.html", places=places)
     except psycopg2.OperationalError as e:
         logger.error(f"Kapcsolati hiba a főoldal lekérdezése során: {str(e)}")
@@ -68,6 +81,9 @@ def index():
         logger.error(f"Hiba a főoldal lekérdezése során: {str(e)}")
         flash(f"⚠️ Hiba történt: {str(e)}", "danger")
         return render_template("index.html", places=[])
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # Új hely hozzáadása
 @app.route("/add", methods=["GET", "POST"])
@@ -84,14 +100,15 @@ def add_place():
             logger.warning("Érvénytelen koordináta formátum.")
             return redirect(url_for("add_place"))
 
+        conn = None
         try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)",
-                        (name, east, north, address, notes)
-                    )
-                conn.commit()
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)",
+                    (name, east, north, address, notes)
+                )
+            conn.commit()
             flash("✅ Hely sikeresen hozzáadva!", "success")
         except psycopg2.errors.UniqueViolation:
             flash("⚠️ Ez a hely már létezik!", "warning")
@@ -101,6 +118,9 @@ def add_place():
         except Exception as e:
             logger.error(f"Hiba történt az adatbázis művelet során: {str(e)}")
             flash(f"⚠️ Hiba történt: {str(e)}", "danger")
+        finally:
+            if conn:
+                release_db_connection(conn)
 
         return redirect(url_for("index"))
 
@@ -122,31 +142,32 @@ def import_csv():
 
         imported_count = 0
         duplicate_entries = []
+        conn = None
 
         try:
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    with open(file_path, newline="", encoding="utf-8-sig") as csvfile:
-                        reader = csv.DictReader(csvfile)
-                        for row in reader:
-                            name = row.get("Név", "").strip()
-                            east = row.get("Kelet", "").strip()
-                            north = row.get("Észak", "").strip()
-                            address = row.get("Cím", "").strip()
-                            notes = row.get("Megjegyzések", "").strip()
+            conn = get_db_connection()
+            with conn.cursor() as cursor:
+                with open(file_path, newline="", encoding="utf-8-sig") as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        name = row.get("Név", "").strip()
+                        east = row.get("Kelet", "").strip()
+                        north = row.get("Észak", "").strip()
+                        address = row.get("Cím", "").strip()
+                        notes = row.get("Megjegyzések", "").strip()
 
-                            if not (is_valid_coordinate(east) and is_valid_coordinate(north)):
-                                continue
+                        if not (is_valid_coordinate(east) and is_valid_coordinate(north)):
+                            continue
 
-                            try:
-                                cursor.execute(
-                                    "INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)",
-                                    (name, east, north, address, notes)
-                                )
-                                imported_count += 1
-                            except psycopg2.errors.UniqueViolation:
-                                duplicate_entries.append(name)
-                conn.commit()
+                        try:
+                            cursor.execute(
+                                "INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)",
+                                (name, east, north, address, notes)
+                            )
+                            imported_count += 1
+                        except psycopg2.errors.UniqueViolation:
+                            duplicate_entries.append(name)
+            conn.commit()
         except psycopg2.OperationalError as e:
             logger.error(f"Kapcsolati hiba a CSV importálás során: {str(e)}")
             flash("⚠️ Adatbázis kapcsolati hiba, kérlek próbáld újra később!", "danger")
@@ -154,6 +175,8 @@ def import_csv():
             logger.error(f"Hiba történt a CSV importálás során: {str(e)}")
             flash(f"⚠️ Hiba történt az importálás során: {str(e)}", "danger")
         finally:
+            if conn:
+                release_db_connection(conn)
             os.remove(file_path)
 
         if imported_count > 0:
@@ -168,11 +191,12 @@ def import_csv():
 # Hely törlése
 @app.route("/delete/<int:id>", methods=["POST"])
 def delete(id):
+    conn = None
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("DELETE FROM places WHERE id = %s", (id,))
-            conn.commit()
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM places WHERE id = %s", (id,))
+        conn.commit()
         flash("🗑️ Hely sikeresen törölve!", "success")
     except psycopg2.OperationalError as e:
         logger.error(f"Kapcsolati hiba a hely törlése során: {str(e)}")
@@ -180,17 +204,21 @@ def delete(id):
     except Exception as e:
         logger.error(f"Hiba történt a hely törlése során: {str(e)}")
         flash(f"⚠️ Hiba történt: {str(e)}", "danger")
+    finally:
+        if conn:
+            release_db_connection(conn)
 
     return redirect(url_for("index"))
 
 # Hely szerkesztése
 @app.route("/edit/<int:id>", methods=["GET", "POST"])
 def edit(id):
+    conn = None
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM places WHERE id = %s", (id,))
-                place = cursor.fetchone()
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM places WHERE id = %s", (id,))
+            place = cursor.fetchone()
 
         if not place:
             flash("❌ A hely nem található!", "danger")
@@ -207,13 +235,12 @@ def edit(id):
                 flash("⚠️ Érvénytelen koordináta formátum!", "danger")
                 return redirect(url_for("edit", id=id))
 
-            with get_db_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "UPDATE places SET name = %s, east = %s, north = %s, address = %s, notes = %s WHERE id = %s",
-                        (name, east, north, address, notes, id)
-                    )
-                conn.commit()
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE places SET name = %s, east = %s, north = %s, address = %s, notes = %s WHERE id = %s",
+                    (name, east, north, address, notes, id)
+                )
+            conn.commit()
             flash("✅ A hely sikeresen módosítva!", "success")
             return redirect(url_for("index"))
 
@@ -226,15 +253,19 @@ def edit(id):
         logger.error(f"Hiba történt a hely szerkesztése során: {str(e)}")
         flash(f"⚠️ Hiba történt: {str(e)}", "danger")
         return redirect(url_for("index"))
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # CSV exportálás
 @app.route("/export")
 def export_csv():
+    conn = None
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT name, east, north, address, notes FROM places")
-                places = cursor.fetchall()
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT name, east, north, address, notes FROM places")
+            places = cursor.fetchall()
 
         csv_data = "Név,Kelet,Észak,Cím,Megjegyzések\n"
         for place in places:
@@ -251,16 +282,20 @@ def export_csv():
         logger.error(f"Hiba történt a CSV exportálás során: {str(e)}")
         flash(f"⚠️ Hiba történt: {str(e)}", "danger")
         return redirect(url_for("index"))
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # API végpont az összes hely JSON-ként való lekérdezésére
 @app.route("/api/places", methods=["GET"])
 def api_places():
     """API végpont az összes hely listázására JSON formátumban."""
+    conn = None
     try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM places ORDER BY name")
-                places = cursor.fetchall()
+        conn = get_db_connection()
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT * FROM places ORDER BY name")
+            places = cursor.fetchall()
 
         places_list = []
         for place in places:
@@ -279,6 +314,9 @@ def api_places():
     except Exception as e:
         logger.error(f"Hiba történt az API lekérdezés során: {str(e)}")
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 if __name__ == "__main__":
     print("\n📌 Regisztrált Flask végpontok:")
