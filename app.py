@@ -1,6 +1,7 @@
 import webbrowser
 from flask import Flask, render_template, request, redirect, url_for, flash, Response, jsonify
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import re
 import os
 import csv
@@ -9,22 +10,18 @@ import sys
 app = Flask(__name__)
 app.secret_key = "titkoskulcs"
 
-# ✅ Adatbázis elérési út beállítása
-def get_database_path():
-    """ Meghatározza az adatbázis helyét az EXE futtatása esetén """
-    if getattr(sys, 'frozen', False):  # Ha EXE-ként futtatjuk
-        base_path = sys._MEIPASS  # PyInstaller által generált ideiglenes mappa
-    else:
-        base_path = os.path.dirname(os.path.abspath(__file__))  # Normál futtatás esetén
-    return os.path.join(base_path, "database.db")
+# ✅ Adatbázis kapcsolat URL a környezetváltozóból
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-DATABASE = get_database_path()
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL környezetváltozó nincs beállítva!")
 
 # ✅ Adatbázis kapcsolat
 def get_db_connection():
-    """ Adatbázis kapcsolat létrehozása """
-    conn = sqlite3.connect(DATABASE, timeout=10, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
+    """ Adatbázis kapcsolat létrehozása PostgreSQL-hez """
+    conn = psycopg2.connect(DATABASE_URL)
+    # A psycopg2-vel a DictCursor használatával hasonlóan működik, mint az sqlite3.Row
+    conn.cursor_factory = psycopg2.extras.DictCursor
     return conn
 
 # ✅ Koordináta formátum ellenőrzés
