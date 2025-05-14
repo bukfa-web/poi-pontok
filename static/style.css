@@ -12,6 +12,34 @@
 }
 
 /* ===========================
+   Sötét téma - Háttérszín és szöveg beállítása
+   =========================== */
+body {
+    background-color: #333333 !important; /* Sötétszürke háttér */
+    color: #ffffff !important; /* Fehér szöveg az olvashatóság érdekében */
+}
+
+/* A Bootstrap által használt container háttérszínének felülírása */
+.container {
+    background-color: transparent !important; /* Átlátszó háttér a containernek */
+}
+
+/* A Bootstrap alert üzenetek háttérszínének és szövegének biztosítása */
+.alert {
+    color: #ffffff !important; /* Fehér szöveg az alert üzenetekben */
+    background-color: #444444 !important; /* Sötétebb háttér az alert üzenetekhez */
+}
+
+/* Linkek színének módosítása a sötét háttérhez */
+a {
+    color: #66b3ff !important; /* Világoskék linkek a jobb láthatóság érdekében */
+}
+
+a:hover {
+    color: #99ccff !important; /* Világosabb kék a hover effektusnál */
+}
+
+/* ===========================
    Keresőmező stílusok - Bootstrap felülírása
    =========================== */
 #searchInput {
@@ -21,9 +49,11 @@
     max-width: none !important; /* Bootstrap max-width felülírása */
     display: inline-block !important; /* Megakadályozza a 100% szélességet */
     padding: 5px 10px;
-    border: 1px solid #ccc;
+    border: 1px solid #666; /* Sötétebb szegély a sötét háttérhez */
     border-radius: 5px;
     margin: 10px auto;
+    background-color: #444444 !important; /* Sötétebb háttér a keresőmezőhöz */
+    color: #ffffff !important; /* Fehér szöveg */
 }
 
 /* Mobilnézetben a keresőmező teljes szélességet kap */
@@ -40,15 +70,22 @@ table {
     width: var(--table-width); /* Táblázat szélessége */
     border-collapse: collapse;
     margin: 10px 0;
+    background-color: #444444 !important; /* Sötétebb háttér a táblázathoz */
 }
 
 table th, table td {
-    border: 1px solid #ddd;
+    border: 1px solid #666; /* Sötétebb szegély a sötét háttérhez */
     padding: var(--table-cell-padding); /* Cellák térköze változtatható */
     text-align: center;
     font-size: var(--table-font-size) !important; /* Eredeti betűméret megtartása */
     height: auto; /* Automatikus méretezés a tartalom alapján */
     vertical-align: middle; /* Szöveg függőleges középre igazítása */
+    color: #ffffff !important; /* Fehér szöveg a táblázat celláiban */
+}
+
+/* Táblázat fejlécek (th) stílusa */
+table th {
+    background-color: #555555 !important; /* Még sötétebb háttér a fejlécekhez */
 }
 
 /* ===========================
@@ -116,6 +153,7 @@ h1 {
     font-size: 28px !important;
     font-weight: bold;
     text-align: center;
+    color: #ffffff !important; /* Fehér szöveg a címekhez */
 }
 
 /* ===========================
@@ -126,22 +164,24 @@ h1 {
     max-width: 600px;
     margin: 0 auto;
     border-collapse: collapse; /* Cellák közötti térköz eltüntetése */
-    background-color: #f8f9fa; /* Világos háttér */
+    background-color: #444444 !important; /* Sötétebb háttér az űrlap táblázathoz */
     border-radius: 8px;
-    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.3); /* Árnyék erősebb a sötét háttérhez */
     padding: 15px;
 }
 
 /* Sorok és cellák beállítása */
 .styled-form-table td {
     padding: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid #666; /* Sötétebb szegély a sötét háttérhez */
+    color: #ffffff !important; /* Fehér szöveg a cellákban */
 }
 
 /* Címkék stílusa */
 .styled-form-table label {
     font-weight: bold;
     font-size: 14px;
+    color: #ffffff !important; /* Fehér szöveg a címkékhez */
 }
 
 /* Űrlapmezők formázása */
@@ -150,47 +190,9 @@ h1 {
     padding: 8px;
     font-size: 16px;
     border-radius: 5px;
-}
-
-/* Gombok igazítása */
-.styled-form-table button, 
-.styled-form-table a {
-    margin-top: 10px;
-    display: inline-block;
-}
-
-/* ===========================
-   Módosítás oldal - Táblázatos Stílus
-   =========================== */
-.styled-form-table {
-    width: 100%;
-    max-width: 600px;
-    margin: 0 auto;
-    border-collapse: collapse; /* Cellák közötti térköz eltüntetése */
-    background-color: #f8f9fa; /* Világos háttér */
-    border-radius: 8px;
-    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-    padding: 15px;
-}
-
-/* Sorok és cellák beállítása */
-.styled-form-table td {
-    padding: 10px;
-    border: 1px solid #ddd;
-}
-
-/* Címkék stílusa */
-.styled-form-table label {
-    font-weight: bold;
-    font-size: 14px;
-}
-
-/* Űrlapmezők formázása */
-.styled-form-table .form-control {
-    width: 100%;
-    padding: 8px;
-    font-size: 16px;
-    border-radius: 5px;
+    background-color: #555555 !important; /* Sötétebb háttér az űrlapmezőkhöz */
+    color: #ffffff !important; /* Fehér szöveg */
+    border: 1px solid #666 !important; /* Sötétebb szegély */
 }
 
 /* Gombok igazítása */
