@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Új Felhasználó Hozzáadása{% endblock %}
+
+{% block content %}
+<h1>Új Felhasználó Hozzáadása</h1>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+{% endwith %}
+
+<form method="POST" action="{{ url_for('add_user') }}">
+    <div class="mb-3">
+        <label for="email" class="form-label">Email</label>
+        <input type="email" class="form-control" id="email" name="email" required>
+    </div>
+    <div class="mb-3">
+        <label for="password" class="form-label">Jelszó</label>
+        <input type="password" class="form-control" id="password" name="password" required>
+    </div>
+    <div class="mb-3">
+        <label for="role" class="form-label">Szerepkör</label>
+        <select class="form-control" id="role" name="role">
+            <option value="user">Felhasználó</option>
+            <option value="admin">Admin</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-action-new btn-sm">Hozzáadás</button>
+    <a href="{{ url_for('users') }}" class="btn btn-secondary-action btn-sm">Vissza</a>
+</form>
+{% endblock %}

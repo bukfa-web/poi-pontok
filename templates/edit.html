@@ -3,45 +3,38 @@
 {% block title %}Hely módosítása{% endblock %}
 
 {% block content %}
-<h1 class="text-center">Hely módosítása</h1>
+<h1>Hely módosítása</h1>
 
-<!-- Táblázatos szerkezet az űrlaphoz -->
-<form method="POST" action="{{ url_for('edit', id=place['id']) }}">
-    <table class="styled-form-table">
-        <tr>
-            <td><label for="name" class="form-label">Név:</label></td>
-            <td><input type="text" id="name" name="name" class="form-control" value="{{ place['name'] }}" required></td>
-        </tr>
-        <tr>
-    <td><label for="east" class="form-label">Kelet (longitude):</label></td>
-    <td>
-    <input type="text" id="east" name="east" class="form-control" value="{{ place['east'] }}" 
-           pattern="\d{1,2}(\.\d{1,7})?" required title="Formátum: 1-2 számjegy + opcionális . + maximum 7 számjegy">
-	</td>
-		</tr>
-		<tr>
-	<td><label for="north" class="form-label">Észak (latitude):</label></td>
-	<td>
-    <input type="text" id="north" name="north" class="form-control" value="{{ place['north'] }}" 
-           pattern="\d{1,2}(\.\d{1,7})?" required title="Formátum: 1-2 számjegy + opcionális . + maximum 7 számjegy">
-</td>
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
 
-</tr>
-
-        <tr>
-            <td><label for="address" class="form-label">Cím:</label></td>
-            <td><input type="text" id="address" name="address" class="form-control" value="{{ place['address'] }}"></td>
-        </tr>
-        <tr>
-            <td><label for="notes" class="form-label">Megjegyzések:</label></td>
-            <td><textarea id="notes" name="notes" class="form-control">{{ place['notes'] }}</textarea></td>
-        </tr>
-        <tr>
-            <td colspan="2" class="text-center">
-                <button type="submit" class="btn btn-warning">Módosítás</button>
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">Vissza</a>
-            </td>
-        </tr>
-    </table>
+<form method="POST" action="{{ url_for('edit', id=place.id if place.get('id') else place[0]) }}">
+    <div class="mb-3">
+        <label for="name" class="form-label">Név</label>
+        <input type="text" class="form-control" id="name" name="name" value="{{ form_data.get('name') if form_data else (place.get('name') if place.get('name') else place[1]) }}" required>
+    </div>
+    <div class="mb-3">
+        <label for="east" class="form-label">Kelet (longitude)</label>
+        <input type="text" class="form-control" id="east" name="east" value="{{ form_data.get('east') if form_data else (place.get('east') if place.get('east') else str(place[2])) }}" required>
+    </div>
+    <div class="mb-3">
+        <label for="north" class="form-label">Észak (latitude)</label>
+        <input type="text" class="form-control" id="north" name="north" value="{{ form_data.get('north') if form_data else (place.get('north') if place.get('north') else str(place[3])) }}" required>
+    </div>
+    <div class="mb-3">
+        <label for="address" class="form-label">Cím</label>
+        <input type="text" class="form-control" id="address" name="address" value="{{ form_data.get('address') if form_data else (place.get('address') if place.get('address') else place[4]) }}">
+    </div>
+    <div class="mb-3">
+        <label for="notes" class="form-label">Megjegyzések</label>
+        <textarea class="form-control" id="notes" name="notes">{{ form_data.get('notes') if form_data else (place.get('notes') if place.get('notes') else place[5]) }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-action-new btn-sm">Módosítás</button>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary-action btn-sm">Vissza</a>
 </form>
 {% endblock %}
