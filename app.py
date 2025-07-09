@@ -11,6 +11,8 @@ from waitress import serve
 from datetime import timedelta
 import firebase_admin
 from firebase_admin import credentials, auth
+from dotenv import load_dotenv
+import json
 
 # Naplózás beállítása (DEBUG szint engedélyezve)
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,13 +24,30 @@ app.secret_key = "titkoskulcs"
 # Munkamenet konfigurálása
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # Munkamenet 30 perc után lejár
 
-# Firebase inicializálása
-cred = credentials.Certificate("firebase-adminsdk.json")
+# Lokális .env betöltése, ha létezik (élesben felülírja a Railway változó)
+load_dotenv()  # Betölti a .env fájlt, ha létezik
+
+# Firebase inicializálása környezetváltozóval
+firebase_config = os.environ.get('FIREBASE_CONFIG')
+if not firebase_config:
+    logger.error("FIREBASE_CONFIG környezetváltozó nincs beállítva!")
+    raise ValueError("FIREBASE_CONFIG környezetváltozó nincs beállítva!")
+
+# Konvertáljuk a JSON stringet objektummá
+try:
+    cred_data = json.loads(firebase_config)
+    cred = credentials.Certificate(cred_data)
+except json.JSONDecodeError as e:
+    logger.error(f"Hiba a Firebase konfiguráció JSON dekódolásakor: {str(e)}")
+    raise ValueError("A FIREBASE_CONFIG érvénytelen JSON formátumú!")
+except Exception as e:
+    logger.error(f"Hiba a Firebase inicializálása során: {str(e)}")
+    raise
+
 firebase_admin.initialize_app(cred)
 
 # Adatbázis kapcsolat URL a környezetváltozóból
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
 if not DATABASE_URL:
     logger.error("DATABASE_URL környezetváltozó nincs beállítva!")
     raise ValueError("DATABASE_URL környezetváltozó nincs beállítva!")
