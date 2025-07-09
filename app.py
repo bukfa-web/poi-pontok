@@ -8,7 +8,7 @@ import os
 import csv
 import time
 from waitress import serve
-from datetime import timedelta
+from datetime import datetime, timedelta
 import firebase_admin
 from firebase_admin import credentials, auth
 from dotenv import load_dotenv
@@ -18,14 +18,36 @@ import json
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Middleware az inaktivitási időzítéshez
+class SessionTimeout:
+    def __init__(self, app, timeout=timedelta(minutes=15)):
+        self.app = app
+        self.timeout = timeout
+
+    def __call__(self, environ, start_response):
+        session = environ.get('flask.session', {})
+        last_activity = session.get('last_activity')
+
+        if 'user' in session and last_activity:
+            inactivity = datetime.utcnow() - last_activity
+            if inactivity > self.timeout:
+                session.pop('user', None)
+                flash("⚠️ Inaktivitás miatt kijelentkeztettél!", "warning")
+
+        def new_start_response(status, headers, exc_info=None):
+            if 'user' in session:
+                session['last_activity'] = datetime.utcnow()
+            return start_response(status, headers, exc_info)
+
+        return self.app(environ, new_start_response)
+
 app = Flask(__name__)
 app.secret_key = "titkoskulcs"
-
-# Munkamenet konfigurálása
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # Munkamenet 30 perc után lejár
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+app.wsgi_app = SessionTimeout(app.wsgi_app, timeout=timedelta(minutes=15))
 
 # Lokális .env betöltése, ha létezik (élesben felülírja a Railway változó)
-load_dotenv()  # Betölti a .env fájlt, ha létezik
+load_dotenv()
 
 # Firebase inicializálása környezetváltozóval
 firebase_config = os.environ.get('FIREBASE_CONFIG')
@@ -33,7 +55,6 @@ if not firebase_config:
     logger.error("FIREBASE_CONFIG környezetváltozó nincs beállítva!")
     raise ValueError("FIREBASE_CONFIG környezetváltozó nincs beállítva!")
 
-# Konvertáljuk a JSON stringet objektummá
 try:
     cred_data = json.loads(firebase_config)
     cred = credentials.Certificate(cred_data)
@@ -55,10 +76,9 @@ if not DATABASE_URL:
 # Kapcsolat pool inicializálása
 try:
     db_pool = psycopg2.pool.SimpleConnectionPool(
-        minconn=1,  # Minimális kapcsolatok száma
-        maxconn=5,  # Maximális kapcsolatok számának csökkentése
+        minconn=1,
+        maxconn=5,
         dsn=DATABASE_URL,
-        # Keepalive beállítások
         keepalives=1,
         keepalives_idle=30,
         keepalives_interval=10,
@@ -71,13 +91,11 @@ except Exception as e:
 
 # Kapcsolat lekérése a poolból újracsatlakozási logikával
 def get_db_connection(max_retries=3, retry_delay=1):
-    """ Kapcsolat lekérése a poolból """
     attempt = 0
     while attempt < max_retries:
         try:
             conn = db_pool.getconn()
             conn.cursor_factory = psycopg2.extras.DictCursor
-            # Teszteljük a kapcsolatot egy egyszerű lekérdezéssel
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
             logger.debug("Kapcsolat sikeresen lekérve a poolból.")
@@ -93,20 +111,15 @@ def get_db_connection(max_retries=3, retry_delay=1):
             logger.error(f"Hiba a kapcsolat lekérése során: {str(e)}")
             raise
 
-# Kapcsolat visszahelyezése a poolba
 def release_db_connection(conn):
-    """ Kapcsolat visszahelyezése a poolba """
     try:
         db_pool.putconn(conn)
     except Exception as e:
         logger.error(f"Hiba a kapcsolat visszahelyezése során: {str(e)}")
 
-# Koordináta formátum ellenőrzés
 def is_valid_coordinate(value):
-    """ Ellenőrzi, hogy egy szám megfelelő koordináta formátum-e """
     return bool(re.match(r"^-?\d{1,2}(\.\d{1,7})?$", value))
 
-# Főoldal
 @app.route("/")
 def index():
     conn = None
@@ -115,7 +128,6 @@ def index():
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM places ORDER BY name")
             places = cursor.fetchall()
-        # A remotepg és is_admin változók átadása a sablonnak
         is_admin = session.get('user', {}).get('role') == 'admin'
         remotepg = 'user' in session
         logger.debug(f"Sesszió adatok: {session.get('user')}, is_admin: {is_admin}")
@@ -132,50 +144,38 @@ def index():
         if conn:
             release_db_connection(conn)
 
-# Új hely hozzáadása
 @app.route("/add", methods=["GET", "POST"])
 def add_place():
     if 'user' not in session:
         flash("⚠️ Kérlek, jelentkezz be a hely hozzáadásához!", "danger")
         return redirect(url_for("login"))
-
     if request.method == "POST":
         name = request.form["name"].strip()
-        east = round(float(request.form["east"].strip()), 6)  # Kerekítés 6 tizedesjegyre
-        north = round(float(request.form["north"].strip()), 6)  # Kerekítés 6 tizedesjegyre
+        east = round(float(request.form["east"].strip()), 6)
+        north = round(float(request.form["north"].strip()), 6)
         address = request.form.get("address", "").strip()
         notes = request.form.get("notes", "").strip()
-
         if not (is_valid_coordinate(str(east)) and is_valid_coordinate(str(north))):
             flash("⚠️ Érvénytelen koordináta formátum!", "danger")
             logger.warning("Érvénytelen koordináta formátum.")
             return redirect(url_for("add_place"))
-
         conn = None
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
-                # Ellenőrizzük az egyediséget minden mezőre az adatbázisban
                 cursor.execute("SELECT 1 FROM places WHERE name = %s", (name,))
                 if cursor.fetchone():
                     flash("⚠️ Ez a név már létezik! Kérlek, válassz egyedi nevet.", "warning")
                     return redirect(url_for("add_place"))
-
                 cursor.execute("SELECT 1 FROM places WHERE east = %s", (east,))
                 if cursor.fetchone():
                     flash("⚠️ Ez a Kelet koordináta már létezik! Kérlek, válassz egyedi koordinátát.", "warning")
                     return redirect(url_for("add_place"))
-
                 cursor.execute("SELECT 1 FROM places WHERE north = %s", (north,))
                 if cursor.fetchone():
                     flash("⚠️ Ez az Észak koordináta már létezik! Kérlek, válassz egyedi koordinátát.", "warning")
                     return redirect(url_for("add_place"))
-
-                # Ha minden mező egyedi, mentsük az adatot
-                cursor.execute(
-                    "INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)",
-                    (name, east, north, address, notes)
-                )
+                cursor.execute("INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)", (name, east, north, address, notes))
             conn.commit()
             flash("✅ Hely sikeresen hozzáadva!", "success")
         except psycopg2.errors.UniqueViolation as e:
@@ -190,34 +190,27 @@ def add_place():
         finally:
             if conn:
                 release_db_connection(conn)
-
         return redirect(url_for("index"))
-
     return render_template("add.html")
 
-# CSV importálás
 @app.route("/import", methods=["GET", "POST"])
 def import_csv():
     if 'user' not in session:
         flash("⚠️ Kérlek, jelentkezz be a CSV importálásához!", "danger")
         return redirect(url_for("login"))
-
     if request.method == "POST":
         file = request.files["file"]
         if not file:
             flash("❌ Nincs fájl kiválasztva!", "danger")
             return redirect(url_for("import_csv"))
-
         UPLOAD_FOLDER = "uploads"
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(file_path)
-
         imported_count = 0
         duplicate_entries = []
         error_entries = []
         conn = None
-
         try:
             conn = get_db_connection()
             with conn.cursor() as cursor:
@@ -229,54 +222,50 @@ def import_csv():
                         logger.debug(f"Feldolgozás alatt lévő sor: {row}")
                         name = row.get("Név", "").strip()
                         try:
-                            east = round(float(row.get("Kelet", "").strip()), 6)  # Kerekítés 6 tizedesjegyre
-                            north = round(float(row.get("Észak", "").strip()), 6)  # Kerekítés 6 tizedesjegyre
+                            east = round(float(row.get("Kelet", "").strip()), 6)
+                            north = round(float(row.get("Észak", "").strip()), 6)
                         except ValueError as ve:
                             logger.warning(f"Érvénytelen koordináta formátum a sorban: {row}, hiba: {str(ve)}")
                             error_entries.append(f"Sor: {row} - Érvénytelen koordináta")
                             continue
-
                         address = row.get("Cím", "").strip()
                         notes = row.get("Megjegyzések", "").strip()
-
                         if not (is_valid_coordinate(str(east)) and is_valid_coordinate(str(north))):
                             logger.warning(f"Érvénytelen koordináta: east={east}, north={north}")
                             error_entries.append(f"Sor: {row} - Érvénytelen koordináta formátum")
                             continue
-
-                        # Ellenőrizzük az egyediséget minden mezőre
                         cursor.execute("SELECT 1 FROM places WHERE name = %s", (name,))
                         if cursor.fetchone():
                             logger.warning(f"Duplikált név: {name}")
                             duplicate_entries.append(f"Név: {name}")
                             continue
-
                         cursor.execute("SELECT 1 FROM places WHERE east = %s", (east,))
                         if cursor.fetchone():
                             logger.warning(f"Duplikált Kelet: {east}")
                             duplicate_entries.append(f"Kelet: {east}")
                             continue
-
                         cursor.execute("SELECT 1 FROM places WHERE north = %s", (north,))
                         if cursor.fetchone():
                             logger.warning(f"Duplikált Észak: {north}")
                             duplicate_entries.append(f"Észak: {north}")
                             continue
-
                         try:
                             logger.debug(f"Insert készítése: name={name}, east={east}, north={north}")
-                            cursor.execute(
-                                "INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)",
-                                (name, east, north, address, notes)
-                            )
-                            conn.commit()  # Egyenként commit-oljuk a sikeres insert-eket
+                            cursor.execute("INSERT INTO places (name, east, north, address, notes) VALUES (%s, %s, %s, %s, %s)", (name, east, north, address, notes))
+                            conn.commit()
                             imported_count += 1
                             logger.debug(f"Sikeres insert: id={cursor.lastrowid if hasattr(cursor, 'lastrowid') else 'N/A'}")
                         except psycopg2.Error as e:
                             logger.error(f"Hiba az insert során: {str(e)}, sor: {row}")
                             error_entries.append(f"Sor: {row} - Hiba: {str(e)}")
                             if conn:
-                                conn.rollback()  # Hiba esetén visszavonjuk az adott műveletet
+                                conn.rollback()
+                if imported_count > 0:
+                    flash(f"✅ {imported_count} új hely importálva!", "success")
+                if duplicate_entries:
+                    flash(f"⚠️ {len(duplicate_entries)} duplikált bejegyzés nem importálódott: {', '.join(duplicate_entries)}", "warning")
+                if error_entries:
+                    flash(f"⚠️ {len(error_entries)} hiba történt az importálás során: {', '.join(error_entries)}", "warning")
         except psycopg2.Error as e:
             logger.error(f"Tranzakciós hiba a CSV importálás során: {str(e)}")
             flash(f"⚠️ Tranzakciós hiba az importálás során: {str(e)}", "danger")
@@ -287,25 +276,14 @@ def import_csv():
             if conn:
                 release_db_connection(conn)
             os.remove(file_path)
-
-        if imported_count > 0:
-            flash(f"✅ {imported_count} új hely importálva!", "success")
-        if duplicate_entries:
-            flash(f"⚠️ {len(duplicate_entries)} duplikált bejegyzés nem importálódott: {', '.join(duplicate_entries)}", "warning")
-        if error_entries:
-            flash(f"⚠️ {len(error_entries)} hiba történt az importálás során: {', '.join(error_entries)}", "warning")
-
         return redirect(url_for("index"))
-
     return render_template("import.html")
 
-# Hely törlése
 @app.route("/delete/<int:id>", methods=["POST"])
 def delete(id):
     if 'user' not in session or session.get('user', {}).get('role') != 'admin':
         flash("⚠️ Kérlek, jelentkezz be adminisztrátorként a hely törléséhez!", "danger")
         return redirect(url_for("login"))
-
     conn = None
     try:
         conn = get_db_connection()
@@ -324,16 +302,13 @@ def delete(id):
     finally:
         if conn:
             release_db_connection(conn)
-
     return redirect(url_for("index"))
 
-# Hely szerkesztése
 @app.route("/edit/<int:id>", methods=["GET", "POST"])
 def edit(id):
     if 'user' not in session or session.get('user', {}).get('role') != 'admin':
         flash("⚠️ Kérlek, jelentkezz be adminisztrátorként a hely szerkesztéséhez!", "danger")
         return redirect(url_for("login"))
-
     conn = None
     try:
         conn = get_db_connection()
@@ -342,47 +317,35 @@ def edit(id):
             cursor.execute("SELECT * FROM places WHERE id = %s", (id,))
             place = cursor.fetchone()
             logger.debug(f"Lekérdezett hely: {place}")
-
         if not place:
             flash("❌ A hely nem található!", "danger")
             return redirect(url_for("index"))
-
         if request.method == "POST":
             name = request.form["name"].strip()
-            east = round(float(request.form["east"].strip()), 6)  # Kerekítés 6 tizedesjegyre
-            north = round(float(request.form["north"].strip()), 6)  # Kerekítés 6 tizedesjegyre
+            east = round(float(request.form["east"].strip()), 6)
+            north = round(float(request.form["north"].strip()), 6)
             address = request.form.get("address", "").strip()
             notes = request.form.get("notes", "").strip()
-
             if not (is_valid_coordinate(str(east)) and is_valid_coordinate(str(north))):
                 flash("⚠️ Érvénytelen koordináta formátum!", "danger")
                 return redirect(url_for("edit", id=id))
-
-            # Ellenőrizzük az egyediséget, kivéve a saját rekordot
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1 FROM places WHERE name = %s AND id != %s", (name, id))
                 if cursor.fetchone():
                     flash("⚠️ Ez a név már létezik egy másik rekordban!", "warning")
                     return redirect(url_for("edit", id=id))
-
                 cursor.execute("SELECT 1 FROM places WHERE east = %s AND id != %s", (east, id))
                 if cursor.fetchone():
                     flash("⚠️ Ez a Kelet koordináta már létezik egy másik rekordban!", "warning")
                     return redirect(url_for("edit", id=id))
-
                 cursor.execute("SELECT 1 FROM places WHERE north = %s AND id != %s", (north, id))
                 if cursor.fetchone():
                     flash("⚠️ Ez az Észak koordináta már létezik egy másik rekordban!", "warning")
                     return redirect(url_for("edit", id=id))
-
-                cursor.execute(
-                    "UPDATE places SET name = %s, east = %s, north = %s, address = %s, notes = %s WHERE id = %s",
-                    (name, east, north, address, notes, id)
-                )
+                cursor.execute("UPDATE places SET name = %s, east = %s, north = %s, address = %s, notes = %s WHERE id = %s", (name, east, north, address, notes, id))
             conn.commit()
             flash("✅ A hely sikeresen módosítva!", "success")
             return redirect(url_for("index"))
-
         return render_template("edit.html", place=place, form_data=request.form if request.method == "POST" else None)
     except psycopg2.errors.UniqueViolation as e:
         logger.error(f"Egyediség megsértése: {str(e)}")
@@ -400,24 +363,20 @@ def edit(id):
         if conn:
             release_db_connection(conn)
 
-# CSV exportálás
 @app.route("/export")
 def export_csv():
     if 'user' not in session:
         flash("⚠️ Kérlek, jelentkezz be a CSV exportálásához!", "danger")
         return redirect(url_for("login"))
-
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute("SELECT name, east, north, address, notes FROM places")
             places = cursor.fetchall()
-
         csv_data = "Név,Kelet,Észak,Cím,Megjegyzések\n"
         for place in places:
             csv_data += f"{place['name']},{place['east']},{place['north']},{place['address']},{place['notes']}\n"
-
         response = Response(csv_data.encode("utf-8-sig"), mimetype="text/csv")
         response.headers["Content-Disposition"] = "attachment; filename=helyek_export.csv"
         return response
@@ -433,38 +392,25 @@ def export_csv():
         if conn:
             release_db_connection(conn)
 
-# Bejelentkezés
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if 'user' in session:
         flash("Már be vagy jelentkezve!", "info")
         return redirect(url_for("index"))
-
     if request.method == "POST":
         email = request.form.get("email")
         password = request.form.get("password")
-
         if not email or not password:
             flash("⚠️ Kérlek, add meg az email címet és a jelszót!", "danger")
             return redirect(url_for("login"))
-
         try:
-            # Firebase Authentication használata a hitelesítéshez
             user = auth.get_user_by_email(email)
-            # Custom claims lekérdezése
             logger.debug(f"Felhasználó custom claims: {user.custom_claims}")
             role = user.custom_claims.get('role', 'user') if user.custom_claims else 'user'
-
-            # Munkamenet beállítása
-            session['user'] = {
-                'email': user.email,
-                'uid': user.uid,
-                'role': role
-            }
-            session.permanent = True  # Munkamenet lejárati ideje az app.config alapján
+            session['user'] = {'email': user.email, 'uid': user.uid, 'role': role}
+            session.permanent = True
             flash("✅ Bejelentkezés sikeres!", "success")
             return redirect(url_for("index"))
-
         except auth.UserNotFoundError:
             logger.warning(f"Nem létező felhasználó próbált bejelentkezni: {email}")
             flash("⚠️ Hibás email cím vagy jelszó!", "danger")
@@ -473,10 +419,8 @@ def login():
             logger.error(f"Hiba a bejelentkezés során: {str(e)}")
             flash("⚠️ Hiba történt a bejelentkezés során!", "danger")
             return redirect(url_for("login"))
-
     return render_template("login.html")
 
-# Kijelentkezés
 @app.route("/logout")
 def logout():
     if 'user' in session:
@@ -484,27 +428,15 @@ def logout():
         flash("✅ Sikeresen kijelentkeztél!", "success")
     return redirect(url_for("index"))
 
-# API végpont az összes hely JSON-ként való lekérdezésére
 @app.route("/api/places", methods=["GET"])
 def api_places():
-    """API végpont az összes hely listázásra JSON formátumban."""
     conn = None
     try:
         conn = get_db_connection()
         with conn.cursor() as cursor:
             cursor.execute("SELECT * FROM places ORDER BY name")
             places = cursor.fetchall()
-
-        places_list = []
-        for place in places:
-            places_list.append({
-                "id": place["id"],
-                "name": place["name"],
-                "east": place["east"],
-                "north": place["north"],
-                "address": place["address"],
-                "notes": place["notes"]
-            })
+        places_list = [{"id": place["id"], "name": place["name"], "east": place["east"], "north": place["north"], "address": place["address"], "notes": place["notes"]} for place in places]
         return jsonify(places_list)
     except psycopg2.OperationalError as e:
         logger.error(f"Kapcsolati hiba az API lekérdezés során: {str(e)}")
@@ -516,58 +448,34 @@ def api_places():
         if conn:
             release_db_connection(conn)
 
-# Felhasználók listázása
 @app.route("/users", methods=["GET"])
 def users():
     if 'user' not in session or session.get('user', {}).get('role') != 'admin':
         flash("⚠️ Kérlek, jelentkezz be adminisztrátorként a felhasználók megtekintéséhez!", "danger")
         return redirect(url_for("login"))
-
-    conn = None
     try:
-        # Firebase-ből lekérjük a felhasználókat
         users = auth.list_users().iterate_all()
-        user_list = []
-        for user in users:
-            user_data = {
-                'email': user.email,
-                'role': user.custom_claims.get('role', 'user') if user.custom_claims else 'user',
-                'uid': user.uid
-            }
-            user_list.append(user_data)
-
+        user_list = [{"email": user.email, "role": user.custom_claims.get('role', 'user') if user.custom_claims else 'user', "uid": user.uid} for user in users]
         return render_template("users.html", users=user_list)
     except Exception as e:
         logger.error(f"Hiba a felhasználók lekérdezése során: {str(e)}")
         flash("⚠️ Hiba történt a felhasználók lekérdezése során!", "danger")
         return redirect(url_for("index"))
-    finally:
-        if conn:
-            release_db_connection(conn)
 
-# Új felhasználó hozzáadása
 @app.route("/add_user", methods=["GET", "POST"])
 def add_user():
     if 'user' not in session or session.get('user', {}).get('role') != 'admin':
         flash("⚠️ Kérlek, jelentkezz be adminisztrátorként új felhasználó hozzáadásához!", "danger")
         return redirect(url_for("login"))
-
     if request.method == "POST":
         email = request.form.get("email")
         password = request.form.get("password")
-        role = request.form.get("role", "user")  # Alapértelmezett szerepkör: 'user'
-
+        role = request.form.get("role", "user")
         if not email or not password:
             flash("⚠️ Kérlek, add meg az email címet és a jelszót!", "danger")
             return redirect(url_for("add_user"))
-
         try:
-            # Új felhasználó létrehozása a Firebase-ben
-            user = auth.create_user(
-                email=email,
-                password=password
-            )
-            # Szerepkör beállítása custom claim-ekkel
+            user = auth.create_user(email=email, password=password)
             auth.set_custom_user_claims(user.uid, {"role": role})
             logger.info(f"Új felhasználó létrehozva: email={email}, role={role}")
             flash("✅ Új felhasználó sikeresen létrehozva!", "success")
@@ -580,16 +488,13 @@ def add_user():
             logger.error(f"Hiba az új felhasználó létrehozása során: {str(e)}")
             flash("⚠️ Hiba történt az új felhasználó létrehozása során!", "danger")
             return redirect(url_for("add_user"))
-
     return render_template("add_user.html")
 
-# Felhasználó szerkesztése
 @app.route("/edit_user/<uid>", methods=["GET", "POST"])
 def edit_user(uid):
     if 'user' not in session or session.get('user', {}).get('role') != 'admin':
         flash("⚠️ Kérlek, jelentkezz be adminisztrátorként a felhasználó szerkesztéséhez!", "danger")
         return redirect(url_for("login"))
-
     try:
         user = auth.get_user(uid)
         if request.method == "POST":
@@ -598,7 +503,6 @@ def edit_user(uid):
             logger.info(f"Felhasználó szerkesztve: email={user.email}, új szerepkör={role}")
             flash("✅ Felhasználó sikeresen szerkesztve!", "success")
             return redirect(url_for("users"))
-
         return render_template("edit_user.html", user=user)
     except auth.UserNotFoundError:
         logger.error(f"Nem létező felhasználó szerkesztése: uid={uid}")
@@ -609,13 +513,11 @@ def edit_user(uid):
         flash("⚠️ Hiba történt a felhasználó szerkesztése során!", "danger")
         return redirect(url_for("users"))
 
-# Felhasználó törlése
 @app.route("/delete_user/<uid>", methods=["POST"])
 def delete_user(uid):
     if 'user' not in session or session.get('user', {}).get('role') != 'admin':
         flash("⚠️ Kérlek, jelentkezz be adminisztrátorként a felhasználó törléséhez!", "danger")
         return redirect(url_for("login"))
-
     try:
         auth.delete_user(uid)
         logger.info(f"Felhasználó törölve: uid={uid}")
@@ -636,4 +538,3 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     logger.info(f"Alkalmazás indítása a {port} porton...")
     serve(app, host="0.0.0.0", port=port)
-	
