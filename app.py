@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Middleware az inaktivitási időzítéshez
 class SessionTimeout:
-    def __init__(self, app, timeout=timedelta(minutes=15)):
+    def __init__(self, app, timeout=timedelta(minutes=5)):
         self.app = app
         self.timeout = timeout
 
