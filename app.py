@@ -8,7 +8,7 @@ import os
 import csv
 import time
 from waitress import serve
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC  # UTC használata
 import firebase_admin
 from firebase_admin import credentials, auth
 from dotenv import load_dotenv
@@ -20,31 +20,36 @@ logger = logging.getLogger(__name__)
 
 # Middleware az inaktivitási időzítéshez
 class SessionTimeout:
-    def __init__(self, app, timeout=timedelta(minutes=15)):
+    def __init__(self, app, timeout=timedelta(minutes=15), ping_timeout=timedelta(seconds=30)):
         self.app = app
         self.timeout = timeout
+        self.ping_timeout = ping_timeout
 
     def __call__(self, environ, start_response):
-        session = environ.get('flask.session', {})
-        last_activity = session.get('last_activity')
+        session_data = environ.get('flask.session', {})
+        last_activity = session_data.get('last_activity')
+        last_seen = session_data.get('last_seen', datetime.now(UTC))  # Timezone-aware
 
-        if 'user' in session and last_activity:
-            inactivity = datetime.utcnow() - last_activity
-            if inactivity > self.timeout:
+        if 'user' in session_data and last_activity:
+            inactivity = datetime.now(UTC) - last_activity
+            unseen = datetime.now(UTC) - last_seen
+            logger.debug(f"Inactivity: {inactivity}, Unseen: {unseen}")  # Debug log
+            if inactivity > self.timeout or unseen > self.ping_timeout:  # Csak valódi inaktivitás vagy ping hiánya
                 session.pop('user', None)
-                flash("⚠️ Inaktivitás miatt kijelentkeztettél!", "warning")
+                flash("⚠️ Inaktivitás miatt kijelentkeztél!", "warning")
 
         def new_start_response(status, headers, exc_info=None):
             if 'user' in session:
-                session['last_activity'] = datetime.utcnow()
+                session['last_activity'] = datetime.now(UTC)
+                session['last_seen'] = datetime.now(UTC)  # Frissítjük az utolsó látott időt minden kérésnél
             return start_response(status, headers, exc_info)
 
         return self.app(environ, new_start_response)
 
 app = Flask(__name__)
 app.secret_key = "titkoskulcs"
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
-app.wsgi_app = SessionTimeout(app.wsgi_app, timeout=timedelta(minutes=15))
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=2)  # Csökkentettük 2 percre
+app.wsgi_app = SessionTimeout(app.wsgi_app, timeout=timedelta(minutes=15), ping_timeout=timedelta(seconds=30))
 
 # Lokális .env betöltése, ha létezik (élesben felülírja a Railway változó)
 load_dotenv()
@@ -358,10 +363,10 @@ def edit(id):
     except Exception as e:
         logger.error(f"Hiba történt a hely szerkesztése során: {str(e)}")
         flash(f"⚠️ Hiba történt: {str(e)}", "danger")
-        return redirect(url_for("index"))
     finally:
         if conn:
             release_db_connection(conn)
+    return redirect(url_for("index"))
 
 @app.route("/export")
 def export_csv():
@@ -421,12 +426,26 @@ def login():
             return redirect(url_for("login"))
     return render_template("login.html")
 
-@app.route("/logout")
+@app.route("/logout", methods=['POST'])
 def logout():
+    logger.debug("Logout endpoint called")
     if 'user' in session:
         session.pop('user', None)
         flash("✅ Sikeresen kijelentkeztél!", "success")
     return redirect(url_for("index"))
+
+@app.route("/ping", methods=['GET'])
+def ping():
+    logger.debug("Ping received")
+    if 'user' in session:
+        session['last_seen'] = datetime.now(UTC)
+    return '', 204  # No Content válasz
+
+@app.route("/clear-sessions", methods=['GET'])
+def clear_sessions():
+    logger.debug("Clearing all sessions")
+    session.clear()  # Törli az aktuális session-t
+    return redirect(url_for("login"))
 
 @app.route("/api/places", methods=["GET"])
 def api_places():
@@ -529,7 +548,7 @@ def delete_user(uid):
         return redirect(url_for("users"))
     except Exception as e:
         logger.error(f"Hiba a felhasználó törlése során: {str(e)}")
-        flash("⚠️ Hiba történt a felhasználó törlése során!", "danger")
+        flash(f"⚠️ Hiba történt a felhasználó törlése során: {str(e)}", "danger")
         return redirect(url_for("users"))
 
 if __name__ == "__main__":

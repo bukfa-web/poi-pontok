@@ -37,6 +37,34 @@
         }
         return gk_fileData[filename] || "";
     }
+
+    // Periodikus ping a szervernek
+    let pingInterval;
+    function startPing() {
+        pingInterval = setInterval(() => {
+            if (document.visibilityState === 'visible' && 'user' in {{ session|tojson|safe }}) {
+                fetch('/ping', {
+                    method: 'GET',
+                    credentials: 'include'
+                }).catch(error => console.error('Ping error:', error));
+            }
+        }, 15000); // 15 másodpercenként ping
+    }
+
+    // Ablak bezárás vagy rejtett állapot detektálása
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && 'user' in {{ session|tojson|safe }}) {
+            navigator.sendBeacon('/ping', ''); // Biztosítjuk, hogy az utolsó ping elküldődjön
+            clearInterval(pingInterval); // Leállítjuk a periódikus pinget
+        } else if (document.visibilityState === 'visible') {
+            startPing(); // Újrakezdjük a pinget, ha láthatóvá válik
+        }
+    });
+
+    // Kezdés az oldal betöltésekor
+    if (document.visibilityState === 'visible') {
+        startPing();
+    }
 </script>
 
 <!DOCTYPE html>
@@ -55,7 +83,9 @@
             <div class="navbar-nav ms-auto">
                 {% if session.user %}
                     <span class="navbar-text me-2">Üdv, {{ session.user.email }}!</span>
-                    <a class="nav-link" href="{{ url_for('logout') }}">Kijelentkezés</a>
+                    <form action="{{ url_for('logout') }}" method="POST" style="display:inline;">
+                        <button type="submit" class="nav-link" style="padding: 0.25rem 0.5rem;">Kijelentkezés</button>
+                    </form>
                 {% else %}
                     <a class="nav-link" href="{{ url_for('login') }}">Bejelentkezés</a>
                 {% endif %}
@@ -77,19 +107,6 @@
 
         {% block content %}{% endblock %}
     </div>
-
-    <!-- JavaScript az oldal elhagyásakor történő kijelentkezéshez -->
-    <script>
-        window.onbeforeunload = function() {
-            fetch('/logout', {
-                method: 'GET',
-                credentials: 'include'
-            })
-            .then(response => response.text())
-            .then(data => console.log('Logout response:', data))
-            .catch(error => console.error('Logout error:', error));
-        };
-    </script>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
