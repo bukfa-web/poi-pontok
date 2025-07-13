@@ -14,8 +14,9 @@ from firebase_admin import credentials, auth
 from dotenv import load_dotenv
 import json
 
-# Naplózás beállítása (DEBUG szint engedélyezve)
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# Naplózás beállítása
+log_level = logging.DEBUG if os.environ.get('APP_ENV', 'development') != 'production' else logging.INFO
+logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Middleware az inaktivitási időzítéshez
@@ -122,8 +123,14 @@ def release_db_connection(conn):
     except Exception as e:
         logger.error(f"Hiba a kapcsolat visszahelyezése során: {str(e)}")
 
-def is_valid_coordinate(value):
-    return bool(re.match(r"^-?\d{1,2}(\.\d{1,7})?$", value))
+def is_valid_coordinate(value, is_longitude=False):
+    if not re.match(r"^-?\d{1,2}(\.\d{1,7})?$", value):
+        return False
+    num = float(value)
+    if is_longitude:
+        return -180 <= num <= 180  # Kelet (longitude)
+    else:
+        return -90 <= num <= 90    # Észak (latitude)
 
 @app.route("/")
 def index():
@@ -143,7 +150,7 @@ def index():
         return render_template("index.html", places=[], remotepg=False, is_admin=False)
     except Exception as e:
         logger.error(f"Hiba a főoldal lekérdezése során: {str(e)}")
-        flash(f"⚠️ Hiba történt: {str(e)}", "danger")
+        flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
         return render_template("index.html", places=[], remotepg=False, is_admin=False)
     finally:
         if conn:
@@ -160,8 +167,8 @@ def add_place():
         north = round(float(request.form["north"].strip()), 6)
         address = request.form.get("address", "").strip()
         notes = request.form.get("notes", "").strip()
-        if not (is_valid_coordinate(str(east)) and is_valid_coordinate(str(north))):
-            flash("⚠️ Érvénytelen koordináta formátum!", "danger")
+        if not (is_valid_coordinate(str(east), is_longitude=True) and is_valid_coordinate(str(north))):
+            flash("⚠️ Érvénytelen koordináta formátum vagy tartomány!", "danger")
             logger.warning("Érvénytelen koordináta formátum.")
             return redirect(url_for("add_place"))
         conn = None
@@ -187,11 +194,11 @@ def add_place():
             logger.error(f"Egyediség megsértése: {str(e)}")
             flash("⚠️ Ez a hely már létezik (mezők egyediek kell legyenek)!", "warning")
         except psycopg2.OperationalError as e:
-            logger.error(f"Kapcsolati hiba az új hely hozzáadása során: {str(e)}")
+            logger.error(f"Kapcsolat hiba az új hely hozzáadása során: {str(e)}")
             flash("⚠️ Adatbázis kapcsolati hiba, kérlek próbáld újra később!", "danger")
         except Exception as e:
             logger.error(f"Hiba történt az adatbázis művelet során: {str(e)}")
-            flash(f"⚠️ Hiba történt: {str(e)}", "danger")
+            flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
         finally:
             if conn:
                 release_db_connection(conn)
@@ -207,6 +214,13 @@ def import_csv():
         file = request.files["file"]
         if not file:
             flash("❌ Nincs fájl kiválasztva!", "danger")
+            return redirect(url_for("import_csv"))
+        max_size = 1024 * 1024  # 1MB limit
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > max_size:
+            flash("⚠️ A fájl túl nagy! Maximum 1MB engedélyezett.", "danger")
             return redirect(url_for("import_csv"))
         UPLOAD_FOLDER = "uploads"
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -235,9 +249,9 @@ def import_csv():
                             continue
                         address = row.get("Cím", "").strip()
                         notes = row.get("Megjegyzések", "").strip()
-                        if not (is_valid_coordinate(str(east)) and is_valid_coordinate(str(north))):
+                        if not (is_valid_coordinate(str(east), is_longitude=True) and is_valid_coordinate(str(north))):
                             logger.warning(f"Érvénytelen koordináta: east={east}, north={north}")
-                            error_entries.append(f"Sor: {row} - Érvénytelen koordináta formátum")
+                            error_entries.append(f"Sor: {row} - Érvénytelen koordináta formátum vagy tartomány")
                             continue
                         cursor.execute("SELECT 1 FROM places WHERE name = %s", (name,))
                         if cursor.fetchone():
@@ -273,10 +287,10 @@ def import_csv():
                     flash(f"⚠️ {len(error_entries)} hiba történt az importálás során: {', '.join(error_entries)}", "warning")
         except psycopg2.Error as e:
             logger.error(f"Tranzakciós hiba a CSV importálás során: {str(e)}")
-            flash(f"⚠️ Tranzakciós hiba az importálás során: {str(e)}", "danger")
+            flash("⚠️ Tranzakciós hiba az importálás során, kérlek próbáld újra!", "danger")
         except Exception as e:
             logger.error(f"Váratlan hiba a CSV importálás során: {str(e)}")
-            flash(f"⚠️ Váratlan hiba az importálás során: {str(e)}", "danger")
+            flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
         finally:
             if conn:
                 release_db_connection(conn)
@@ -299,11 +313,11 @@ def delete(id):
         conn.commit()
         flash("🗑️ Hely sikeresen törölve!", "success")
     except psycopg2.OperationalError as e:
-        logger.error(f"Kapcsolati hiba a hely törlése során: {str(e)}")
+        logger.error(f"Kapcsolat hiba a hely törlése során: {str(e)}")
         flash("⚠️ Adatbázis kapcsolati hiba, kérlek próbáld újra később!", "danger")
     except Exception as e:
         logger.error(f"Hiba történt a hely törlése során: {str(e)}")
-        flash(f"⚠️ Hiba történt: {str(e)}", "danger")
+        flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
     finally:
         if conn:
             release_db_connection(conn)
@@ -331,8 +345,8 @@ def edit(id):
             north = round(float(request.form["north"].strip()), 6)
             address = request.form.get("address", "").strip()
             notes = request.form.get("notes", "").strip()
-            if not (is_valid_coordinate(str(east)) and is_valid_coordinate(str(north))):
-                flash("⚠️ Érvénytelen koordináta formátum!", "danger")
+            if not (is_valid_coordinate(str(east), is_longitude=True) and is_valid_coordinate(str(north))):
+                flash("⚠️ Érvénytelen koordináta formátum vagy tartomány!", "danger")
                 return redirect(url_for("edit", id=id))
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1 FROM places WHERE name = %s AND id != %s", (name, id))
@@ -362,7 +376,7 @@ def edit(id):
         return redirect(url_for("index"))
     except Exception as e:
         logger.error(f"Hiba történt a hely szerkesztése során: {str(e)}")
-        flash(f"⚠️ Hiba történt: {str(e)}", "danger")
+        flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
     finally:
         if conn:
             release_db_connection(conn)
@@ -391,7 +405,7 @@ def export_csv():
         return redirect(url_for("index"))
     except Exception as e:
         logger.error(f"Hiba történt a CSV exportálás során: {str(e)}")
-        flash(f"⚠️ Hiba történt: {str(e)}", "danger")
+        flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
         return redirect(url_for("index"))
     finally:
         if conn:
@@ -422,7 +436,7 @@ def login():
             return redirect(url_for("login"))
         except Exception as e:
             logger.error(f"Hiba a bejelentkezés során: {str(e)}")
-            flash("⚠️ Hiba történt a bejelentkezés során!", "danger")
+            flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
             return redirect(url_for("login"))
     return render_template("login.html")
 
@@ -462,7 +476,7 @@ def api_places():
         return jsonify({"error": "Adatbázis kapcsolati hiba, kérlek próbáld újra később!"}), 500
     except Exception as e:
         logger.error(f"Hiba történt az API lekérdezés során: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Általános hiba történt, kérlek próbáld újra később!"}), 500
     finally:
         if conn:
             release_db_connection(conn)
@@ -478,7 +492,7 @@ def users():
         return render_template("users.html", users=user_list)
     except Exception as e:
         logger.error(f"Hiba a felhasználók lekérdezése során: {str(e)}")
-        flash("⚠️ Hiba történt a felhasználók lekérdezése során!", "danger")
+        flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
         return redirect(url_for("index"))
 
 @app.route("/add_user", methods=["GET", "POST"])
@@ -505,7 +519,7 @@ def add_user():
             return redirect(url_for("add_user"))
         except Exception as e:
             logger.error(f"Hiba az új felhasználó létrehozása során: {str(e)}")
-            flash("⚠️ Hiba történt az új felhasználó létrehozása során!", "danger")
+            flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
             return redirect(url_for("add_user"))
     return render_template("add_user.html")
 
@@ -529,7 +543,7 @@ def edit_user(uid):
         return redirect(url_for("users"))
     except Exception as e:
         logger.error(f"Hiba a felhasználó szerkesztése során: {str(e)}")
-        flash("⚠️ Hiba történt a felhasználó szerkesztése során!", "danger")
+        flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
         return redirect(url_for("users"))
 
 @app.route("/delete_user/<uid>", methods=["POST"])
@@ -548,7 +562,7 @@ def delete_user(uid):
         return redirect(url_for("users"))
     except Exception as e:
         logger.error(f"Hiba a felhasználó törlése során: {str(e)}")
-        flash(f"⚠️ Hiba történt a felhasználó törlése során: {str(e)}", "danger")
+        flash("⚠️ Általános hiba történt, kérlek próbáld újra később!", "danger")
         return redirect(url_for("users"))
 
 if __name__ == "__main__":
