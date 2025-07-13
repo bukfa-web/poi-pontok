@@ -3,7 +3,21 @@ document.addEventListener("DOMContentLoaded", function () {
     let searchButton = document.getElementById("searchButton");
     let clearButton = document.getElementById("clearButton");
 
-    searchButton.addEventListener("click", filterTable);
+    // Debounce függvény: késlelteti a filterTable hívást
+    function debounce(func, delay) {
+        let timeoutId;
+        return function (...args) {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+
+    // Debounced filterTable (300ms késleltetés)
+    const debouncedFilter = debounce(filterTable, 300);
+
+    // Kereső input-ra kötés (realtime, de debounced)
+    searchInput.addEventListener("input", debouncedFilter);
+    searchButton.addEventListener("click", filterTable); // Gombra is marad
     clearButton.addEventListener("click", clearSearch);
 
     function filterTable() {
